@@ -1,0 +1,16 @@
+{
+    "auth": {
+        "validation": {
+            "signin": {
+                "username_required": "Email or User ID is required"
+            }
+        }
+    },
+    "middlewares": {
+        "token_parser": {
+            "validation": {
+                "no_auth": "Invalid Key & Secret Provided"
+            }
+        }
+    }
+}
