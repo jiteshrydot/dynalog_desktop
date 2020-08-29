@@ -14,6 +14,10 @@ const path = require('path');
 const url = require('url');
 const Store = require('electron-store');
 const { machineIdSync } = require('node-machine-id');
+const getmac = require('getmac');
+const shell = require('shelljs');
+const net = require('net');
+const spawn = require('child_process').spawn;
 const store = new Store();
     
 let express = require('express'),
@@ -24,7 +28,10 @@ let express = require('express'),
     modbusConnection = null,
     modbusInterval = null,
     webServer = null,
-    win = null;
+    win = null,
+    mongoPort = null,
+    nodePort = null,
+    webApp = null;
 
 console.log('defining templates');
 
@@ -50,12 +57,13 @@ if (process.platform === 'darwin') {
 const menu = Menu.buildFromTemplate(template)
 Menu.setApplicationMenu(menu)
 
-global.macId = machineIdSync().substr(0, 16);
+global.macId = getmac.default();
 global.config = config;
 
 app.on('ready', function() {
     win = new BrowserWindow({
-        width: 800,
+        width: 960,
+        minWidth: 960,
         height: 600,
         webPreferences: {
             webSecurity: false,
@@ -88,37 +96,120 @@ function closeApp() {
 ipcMain.on('startWebApp', startWebApp);
 ipcMain.on('stopWebApp', stopWebApp);
 ipcMain.once('startModbus', startModbus);
+ipcMain.on('restartModbus', function() {
+    console.log('=================================================================');
+    console.log('RESTARTING');
+    console.log('=================================================================');
+    startModbus(true);
+});
 ipcMain.on('stopModbus', stopModbus);
 ipcMain.on('closeApp', closeApp);
 
-mongoose.Promise = global.Promise;
+startMongoNow();
+function startMongoNow() {
+    console.log('trying to start mongod process');
+    const mongoExe = path.join(__dirname, 'bin', 'mongod.exe');
+    console.log(mongoExe);
+    let dataDir = path.join(process.env.APPDATA, 'Mongoclient', 'db');
+    let lockfile = path.join(dataDir, 'mongod.lock');
 
-connectMongo();
+    console.log('detected mongod data directory: ' + dataDir);
+    console.log('trying to create data dir and removing mongod.lock just in case');
+    shell.mkdir('-p', dataDir);
+    shell.rm('-f', lockfile);
 
-mongoose.connection.on('disconnected', connectMongo);
+    freeport(function () {
+        console.log('trying to spawn mongod process with port: ' + mongoPort);
+        mongoProcess = spawn(mongoExe, [
+            '--dbpath', dataDir,
+            '--port', mongoPort,
+            '--bind_ip', '127.0.0.1'
+        ]);
 
-function connectMongo() {
-    mongoose.connect(config.database, {
-        useCreateIndex: true,
-        useNewUrlParser: true
+        mongoProcess.stdout.on('data', function (data) {
+            // console.log('[MONGOD-STDOUT]', data.toString());
+
+            if (/waiting for connections/.test(data.toString())) {
+                startNodeNow();
+            }
+        });
+
+        mongoProcess.stderr.on('data', function (data) {
+            // console.error('[MONGOD-STDERR]', data.toString());
+            startMongoNow();
+        });
+
+        mongoProcess.on('exit', function (code) {
+            // console.log('[MONGOD-EXIT]', code.toString());
+        });
     });
 }
 
-var webApp = express();
+function startNodeNow() {
+    mongoose.Promise = global.Promise;
 
-var models = glob.sync(config.root + '/app/models/*.js');
-models.forEach(function (model, i) {
-    require(model);
-});
+    connectMongo();
 
-require('./config/express')(webApp, config);
+    mongoose.connection.on('disconnected', connectMongo);
+
+    function connectMongo() {
+        mongoose.connect(`mongodb://127.0.0.1:${mongoPort}/dynalog`, {
+            useCreateIndex: true,
+            useNewUrlParser: true
+        });
+    }
+
+    webApp = express();
+
+    var models = glob.sync(config.root + '/app/models/*.js');
+    models.forEach(function (model, i) {
+        require(model);
+    });
+
+    require('./config/express')(webApp, config);
+    startWebApp()
+}
+
+function freeport(done) {
+    console.log('trying to find free port for spawn');
+    mongoPort = mongoPort || 11235;
+    const socket = new net.Socket()
+        .once('connect', function () {
+            socket.destroy();
+            freeport(++mongoPort, done);
+        })
+        .once('error', function (/* err */) {
+            socket.destroy();
+            done(mongoPort);
+        })
+        .connect(mongoPort, '127.0.0.1');
+}
+
+function freeportNode(done) {
+    console.log('trying to find free port for spawn');
+    nodePort = nodePort || 8080;
+    const socket = new net.Socket()
+        .once('connect', function () {
+            socket.destroy();
+            freeport(++nodePort, done);
+        })
+        .once('error', function (/* err */) {
+            socket.destroy();
+            done(nodePort);
+        })
+        .connect(nodePort, '127.0.0.1');
+}
 
 function startWebApp() {
     if(!webServer || !webServer.listening) {
-        webServer = webApp.listen(config.port, config.host, function () {
-            global.webServerRunning = true;
-            console.log('Express server listening on http://' + config.host + ':' + config.port);
-            sendToWin(win, 'webApp')
+        freeportNode(function(){
+            webServer = webApp.listen(nodePort, config.host, function () {
+                global.webServerRunning = true;
+                global.nodePort = nodePort;
+                console.log('Express server listening on http://' + config.host + ':' + nodePort);
+                sendToWin(win, 'webApp')
+                startModbus();
+            });
         });
     } else {
         global.webServerRunning = true;
@@ -142,10 +233,12 @@ function startModbus(restart) {
     if(restart) {
         try {
             modbusConnection.close();
+            console.log('connection closed')
         } catch(err) {}
     }
     try {
         clearInterval(modbusInterval);
+        console.log('interval closed')
     } catch(err) {}
     mongoose.models.Option.findOne({
         isDeleted: false,
@@ -156,6 +249,7 @@ function startModbus(restart) {
             global.modbusServerRunning = false;
             sendToWin(win, 'webApp')
         } else {
+            console.log(item.data.registers);
             modbus.tcp.connect(item.data.device.port, item.data.device.host, (err, connection) => {
                 modbusConnection = connection;
             });

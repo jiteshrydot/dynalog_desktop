@@ -47,7 +47,7 @@ async function get(req, res, next) {
     if(Object.keys(where.createdAt).length === 0) {
         delete where.createdAt;
     }
-console.log(req.body, where)
+
     mongoose.models.Log.count(where).exec(function (err, c) {
 
         if(err) {
@@ -59,7 +59,7 @@ console.log(req.body, where)
             });
         } else {
 
-            mongoose.models.Log.find(where).limit(limit).skip(skip).exec(function (err, items) {
+            mongoose.models.Log.find(where).sort({createdAt: -1}).limit(limit).skip(skip).exec(function (err, items) {
 
                 if(err) {
                     return handleInternalError(res, err, next);

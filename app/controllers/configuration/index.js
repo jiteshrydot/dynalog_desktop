@@ -16,7 +16,8 @@ var mongoose = require('mongoose'),
     ipAddress = require('../../libs/ipAddress'),
     responder = require('../../libs/responder'),
     validationErrors = require('../../libs/validationErrors'),
-    config = require('../../../config/config');
+    config = require('../../../config/config'),
+    ipcMain = require('electron').ipcMain;
 
 module.exports = {
     get: get,
@@ -82,6 +83,7 @@ async function put(req, res, next) {
         if(err) {
             return responder.handleInternalError(res, err, next);
         } else {
+            ipcMain.emit('restartModbus', true);
             return responder.success(res, {});
         }
     });

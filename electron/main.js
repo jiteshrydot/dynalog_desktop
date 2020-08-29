@@ -16,19 +16,19 @@ var statusDiv = document.getElementById('status');
 initApp();
 
 ipc.on('webApp', initApp)
-ipc.on('modbusApp', initApp)
 
 function initApp() {
     if(remote.getGlobal('macId') !== remote.getGlobal('config').macId) {
         alert('This application is not compatible with this device');
         ipc.send('closeApp')
     }
-    let nodeJSPortion = ``;
+    // let nodeJSPortion = ``;
     if(remote.getGlobal('webServerRunning')) {
-        nodeJSPortion = `<div>
-            Web server is running on Port: ${remote.getGlobal('config').port}
-            <button onclick="return stopWebApp();">Stop</button>
-        </div>`;
+        // nodeJSPortion = `<div>
+        //     Web server is running on Port: ${remote.getGlobal('nodePort')}
+        //     <br> Click <a href="http://localhost:${remote.getGlobal('nodePort')}" target="_blank">here to open</a>
+        //     <button onclick="return stopWebApp();">Stop</button>
+        // </div>`;
     } else {
         nodeJSPortion = `<div>
             Web server is not running
@@ -52,7 +52,11 @@ function initApp() {
 
     const html = '' + nodeJSPortion + modbusPortion;
 
-    statusDiv.innerHTML = html;
+    // statusDiv.innerHTML = html;
+
+    if(remote.getGlobal('webServerRunning') && remote.getGlobal('modbusServerRunning')) {
+        location.href = `http://localhost:${remote.getGlobal('nodePort')}`;
+    }
 
 }
 

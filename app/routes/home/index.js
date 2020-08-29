@@ -9,28 +9,10 @@
  * copyright law. Dissemination of this information or reproduction of this material is strictly forbidden unless
  * prior written permission is obtained from RyDOT Infotech Pvt. Ltd.
 **/
-// Log Model
-var mongoose = require('mongoose'),
-	Schema = mongoose.Schema;
+const router = require('express').Router()
+const config = require('../../../config/config')
+const express = require('express')
 
-var LogSchema = new Schema({
-	data: {
-		type: Schema.Types.Mixed,
-		index: true,
-        default: {}
-    },
-	raw: {
-		type: Schema.Types.Mixed,
-        default: {}
-	},
-	isDeleted: {
-		type: Boolean,
-		default: false
-	},
-	createdAt: {
-		type: Date,
-		default: new Date()
-	}
-});
+router.use('', express.static(config.root + '/public'))
 
-module.exports = mongoose.model('Log', LogSchema);
+module.exports = router

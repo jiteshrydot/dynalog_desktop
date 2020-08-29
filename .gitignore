@@ -1,5 +1,8 @@
 node_modules/
 dist/*
+bin/*
+Dynalog-win32-x64/*
+installer/*
 uploads/*
 past/*
 out_csv/*
@@ -10,8 +13,7 @@ python_models/*
 !uploads/converted/.nofiles
 files/*
 !files/.nofiles
-public/components
-public/img
+public/
 python_models/face_reco/v2/output/*
 !python_models/face_reco/v2/output/.nofile
 .sass-cache

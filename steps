@@ -1,0 +1,4 @@
+1. Do changes
+2. electron-packager ./ --platform=win32 --arch=x64 Dynalog
+3. Update build_installer.js (version change only)
+4. node build_installer.js

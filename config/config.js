@@ -21,6 +21,6 @@ module.exports = {
     },
     database: 'mongodb://localhost/dynalog',
     port: 9133,
-    macId: '214d89c4d12e5cb2',
+    macId: '68:5b:35:93:11:28',
     host: '0.0.0.0'
 };

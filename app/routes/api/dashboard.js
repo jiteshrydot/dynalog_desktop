@@ -13,5 +13,6 @@ const router = require('express').Router(),
     dashboard = require('../../controllers/dashboard');
 
 router.post('/get', dashboard.get);
+router.post('/timeline', dashboard.timeline);
 
 module.exports = router

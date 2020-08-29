@@ -11,5 +11,5 @@
 **/
 module.exports = {
     '/api': 'api',
-    // '/': 'home', // '/' should be at last
+    '/': 'home', // '/' should be at last
 };

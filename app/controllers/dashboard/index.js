@@ -17,9 +17,11 @@ var mongoose = require('mongoose'),
     responder = require('../../libs/responder'),
     validationErrors = require('../../libs/validationErrors'),
     config = require('../../../config/config');
+const { toString } = require('lodash');
 
 module.exports = {
-    get: get
+    get: get,
+    timeline: timeline
 };
 
 async function get(req, res, next) {
@@ -40,6 +42,109 @@ async function get(req, res, next) {
         } else {
             return responder.success(res, {
                 item: {}
+            });
+        }
+    });
+}
+
+async function timeline(req, res, next) {
+
+    var fromDate = req.body.fromDate || '';
+    var toDate = req.body.toDate || '';
+    var tzOffset = (-1) * parseInt(req.headers['x-time-zone']) * 60000;
+    if(!fromDate || !toDate) {
+        return responder.success(res, {
+            list: []
+        })
+    }
+    var where = {
+        isDeleted: false,
+        createdAt: {
+            $gte: new Date(fromDate),
+            $lte: new Date(toDate)
+        }
+    };
+    var $group = {
+        _id: {
+            date: {
+                $dayOfMonth: '$time'
+            },
+            month: {
+                $month: '$time'
+            },
+            year: {
+                $year: '$time'
+            },
+            hour: {
+                $hour: '$time'
+            },
+            minute: {
+                $minute: '$time'
+            }
+        }
+    }
+    var $project = {
+        _id: 0,
+        date: '$_id',
+        calculatedDate: {
+            $sum: [
+                {
+                    $multiply: ['$_id.year', 100000000]
+                },
+                {
+                    $multiply: ['$_id.month', 1000000]
+                },
+                {
+                    $multiply: ['$_id.date', 10000]
+                },
+                {
+                    $multiply: ['$_id.hour', 100]
+                },
+                '$_id.minute'
+            ]
+        }
+    };
+    req.body.registers.filter(reg => reg != '_id').forEach(function(reg) {
+        $group[reg] = {
+            $avg: `$data.${reg}`
+        };
+        $project[reg] = 1;
+    });
+    mongoose.models.Log.aggregate([
+        {
+            $match: where
+        },
+        {
+            $project: {
+                _id: 0,
+                data: 1,
+                time: {
+                    $add: ['$createdAt', tzOffset]
+                }
+            }
+        },
+        {
+            $group: $group
+        },
+        {
+            $project: $project
+        },
+        {
+            $sort: {
+                calculatedDate: 1
+            }
+        }
+    ]).exec(function (err, items) {
+
+        if(err) {
+            return responder.handleInternalError(res, err, next);
+        } else if(items.length > 0) {
+            return responder.success(res, {
+                list: items
+            });
+        } else {
+            return responder.success(res, {
+                list: []
             });
         }
     });
