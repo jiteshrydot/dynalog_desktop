@@ -14,13 +14,10 @@ var fs = require('fs');
 var path = require('path');
 var glob = require('glob');
 var bodyParser = require('body-parser');
-var expressValidator = require('express-validator');
 var methodOverride = require('method-override');
 var routes = require('./routes');
 var tokenParser = require('../app/libs/tokenParser');
 var translation = require('../app/libs/translation');
-var customValidators = require('../app/libs/validators');
-var validationErrorFormatter = require('../app/libs/errorFormatter');
 
 module.exports = function (app, config) {
     var env = process.env.NODE_ENV || 'development';
@@ -72,10 +69,6 @@ module.exports = function (app, config) {
     app.use(bodyParser.json({ limit: '50mb' }));
     app.use(bodyParser.urlencoded({
         extended: true
-    }));
-    app.use(expressValidator({
-        customValidators: customValidators,
-        errorFormatter: validationErrorFormatter
     }));
     app.use('/uploads', function (req, res, next) {
         if (req.method == 'GET') {

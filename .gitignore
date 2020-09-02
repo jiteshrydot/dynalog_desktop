@@ -3,6 +3,7 @@ dist/*
 bin/*
 Dynalog-win32-x64/*
 installer/*
+steps
 uploads/*
 past/*
 out_csv/*

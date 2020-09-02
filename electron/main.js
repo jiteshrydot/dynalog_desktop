@@ -16,41 +16,43 @@ var statusDiv = document.getElementById('status');
 initApp();
 
 ipc.on('webApp', initApp)
+ipc.on('console.log', console.log)
 
 function initApp() {
     if(remote.getGlobal('macId') !== remote.getGlobal('config').macId) {
         alert('This application is not compatible with this device');
-        ipc.send('closeApp')
+        ipc.send('closeApp');
+        return false;
     }
     // let nodeJSPortion = ``;
-    if(remote.getGlobal('webServerRunning')) {
-        // nodeJSPortion = `<div>
-        //     Web server is running on Port: ${remote.getGlobal('nodePort')}
-        //     <br> Click <a href="http://localhost:${remote.getGlobal('nodePort')}" target="_blank">here to open</a>
-        //     <button onclick="return stopWebApp();">Stop</button>
-        // </div>`;
-    } else {
-        nodeJSPortion = `<div>
-            Web server is not running
-            <button onclick="return startWebApp();">Start</button>
-        </div>`;
-    }
+    // if(remote.getGlobal('webServerRunning')) {
+    //     // nodeJSPortion = `<div>
+    //     //     Web server is running on Port: ${remote.getGlobal('nodePort')}
+    //     //     <br> Click <a href="http://localhost:${remote.getGlobal('nodePort')}" target="_blank">here to open</a>
+    //     //     <button onclick="return stopWebApp();">Stop</button>
+    //     // </div>`;
+    // } else {
+    //     nodeJSPortion = `<div>
+    //         Web server is not running
+    //         <button onclick="return startWebApp();">Start</button>
+    //     </div>`;
+    // }
     
-    let modbusPortion = ``;
-    if(remote.getGlobal('modbusServerRunning')) {
-        modbusPortion = `<div>
-            Modbus Script Running
-            <button onclick="return stopModbus();">Stop</button> 
-            <button onclick="return startModbus(true);">Restart</button> 
-        </div>`;
-    } else {
-        modbusPortion = `<div>
-            Modbus Script is not running
-            <button onclick="return startModbus();">Start</button>
-        </div>`;
-    }
+    // let modbusPortion = ``;
+    // if(remote.getGlobal('modbusServerRunning')) {
+    //     modbusPortion = `<div>
+    //         Modbus Script Running
+    //         <button onclick="return stopModbus();">Stop</button> 
+    //         <button onclick="return startModbus(true);">Restart</button> 
+    //     </div>`;
+    // } else {
+    //     modbusPortion = `<div>
+    //         Modbus Script is not running
+    //         <button onclick="return startModbus();">Start</button>
+    //     </div>`;
+    // }
 
-    const html = '' + nodeJSPortion + modbusPortion;
+    // const html = '' + nodeJSPortion + modbusPortion;
 
     // statusDiv.innerHTML = html;
 

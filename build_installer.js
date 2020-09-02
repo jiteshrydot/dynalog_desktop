@@ -11,7 +11,7 @@ const msiCreator = new MSICreator({
     exe: 'Dynalog',
     name: 'Dynalog',
     manufacturer: 'RyDOT Infotech Pvt Ltd',
-    version: '1.0.0',
+    version: '1.0.2',
     ui: {
         chooseDirectory: true
     }

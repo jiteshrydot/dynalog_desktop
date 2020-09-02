@@ -10,13 +10,7 @@
  * prior written permission is obtained from RyDOT Infotech Pvt. Ltd.
 **/
 var mongoose = require('mongoose'),
-    _ = require('lodash'),
-    request = require('request'),
-    translation = require('../../libs/translation'),
-    ipAddress = require('../../libs/ipAddress'),
-    responder = require('../../libs/responder'),
-    validationErrors = require('../../libs/validationErrors'),
-    config = require('../../../config/config');
+    responder = require('../../libs/responder');
 
 module.exports = {
     get: get

@@ -10,14 +10,7 @@
  * prior written permission is obtained from RyDOT Infotech Pvt. Ltd.
 **/
 var mongoose = require('mongoose'),
-    _ = require('lodash'),
-    request = require('request'),
-    translation = require('../../libs/translation'),
-    ipAddress = require('../../libs/ipAddress'),
-    responder = require('../../libs/responder'),
-    validationErrors = require('../../libs/validationErrors'),
-    config = require('../../../config/config');
-const { toString } = require('lodash');
+    responder = require('../../libs/responder');
 
 module.exports = {
     get: get,
@@ -37,7 +30,8 @@ async function get(req, res, next) {
             return handleInternalError(res, err, next);
         } else if(item) {
             return responder.success(res, {
-                item: item.data
+                item: item.data,
+                createdAt: item.createdAt
             });
         } else {
             return responder.success(res, {

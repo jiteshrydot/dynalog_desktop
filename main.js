@@ -13,7 +13,7 @@ const { app, BrowserWindow, ipcMain, session, Menu } = require('electron');
 const path = require('path');
 const url = require('url');
 const Store = require('electron-store');
-const { machineIdSync } = require('node-machine-id');
+// const { machineIdSync } = require('node-machine-id');
 const getmac = require('getmac');
 const shell = require('shelljs');
 const net = require('net');
@@ -23,6 +23,7 @@ const store = new Store();
 let express = require('express'),
     config = require('./config/config'),
     glob = require('glob'),
+    fs = require('fs'),
     mongoose = require('mongoose'),
     modbus = require('modbus-stream'),
     modbusConnection = null,
@@ -31,9 +32,10 @@ let express = require('express'),
     win = null,
     mongoPort = null,
     nodePort = null,
-    webApp = null;
+    webApp = null,
+    logFilePath = null;
 
-console.log('defining templates');
+printLog('defining templates');
 
 const template = [
     {
@@ -54,7 +56,7 @@ if (process.platform === 'darwin') {
     })
 }
 
-const menu = Menu.buildFromTemplate(template)
+const menu = Menu.buildFromTemplate([])
 Menu.setApplicationMenu(menu)
 
 global.macId = getmac.default();
@@ -80,13 +82,14 @@ app.on('ready', function() {
     win.on('closed', () => {
         win = null
     });
+    startMongoNow();
 });
 app.on('window-all-closed', () => {
     closeApp();
 })
 
 function closeApp() {
-    console.log(arguments)
+    printLog(arguments)
     app.quit();
 }
 
@@ -96,30 +99,43 @@ function closeApp() {
 ipcMain.on('startWebApp', startWebApp);
 ipcMain.on('stopWebApp', stopWebApp);
 ipcMain.once('startModbus', startModbus);
+ipcMain.on('updateConfig', function(data) {
+    if(logFilePath) {
+        var text = `${new Date().toString()}\t[Update Config]\t${data}\n`;
+        fs.appendFileSync(logFilePath, text);
+    }
+});
 ipcMain.on('restartModbus', function() {
-    console.log('=================================================================');
-    console.log('RESTARTING');
-    console.log('=================================================================');
+    printLog('=================================================================');
+    printLog('RESTARTING');
+    printLog('=================================================================');
     startModbus(true);
 });
 ipcMain.on('stopModbus', stopModbus);
 ipcMain.on('closeApp', closeApp);
 
-startMongoNow();
 function startMongoNow() {
-    console.log('trying to start mongod process');
-    const mongoExe = path.join(__dirname, 'bin', 'mongod.exe');
-    console.log(mongoExe);
-    let dataDir = path.join(process.env.APPDATA, 'Mongoclient', 'db');
+    printLog('trying to start mongod process');
+    let mongoExe = null;
+    let dataDir = null;
+    if(app.isPackaged) {
+        mongoExe = path.join(process.execPath, '../bin', 'mongod.exe');
+        dataDir = path.join(app.getPath('userData'), 'Mongoclient', 'db');
+        logFilePath = path.join(process.execPath, '../logs.txt');
+    } else {
+        mongoExe = path.join(__dirname, 'bin', 'mongod.exe');
+        dataDir = path.join(process.env.APPDATA, 'Mongoclient', 'db');
+        logFilePath = path.join(__dirname, 'logs.txt');
+    }
     let lockfile = path.join(dataDir, 'mongod.lock');
 
-    console.log('detected mongod data directory: ' + dataDir);
-    console.log('trying to create data dir and removing mongod.lock just in case');
+    printLog('detected mongod data directory: ' + dataDir);
+    printLog('trying to create data dir and removing mongod.lock just in case');
     shell.mkdir('-p', dataDir);
     shell.rm('-f', lockfile);
 
     freeport(function () {
-        console.log('trying to spawn mongod process with port: ' + mongoPort);
+        printLog('trying to spawn mongod process with port: ' + mongoPort);
         mongoProcess = spawn(mongoExe, [
             '--dbpath', dataDir,
             '--port', mongoPort,
@@ -127,7 +143,7 @@ function startMongoNow() {
         ]);
 
         mongoProcess.stdout.on('data', function (data) {
-            // console.log('[MONGOD-STDOUT]', data.toString());
+            // printLog('[MONGOD-STDOUT]', data.toString());
 
             if (/waiting for connections/.test(data.toString())) {
                 startNodeNow();
@@ -140,7 +156,7 @@ function startMongoNow() {
         });
 
         mongoProcess.on('exit', function (code) {
-            // console.log('[MONGOD-EXIT]', code.toString());
+            // printLog('[MONGOD-EXIT]', code.toString());
         });
     });
 }
@@ -171,12 +187,13 @@ function startNodeNow() {
 }
 
 function freeport(done) {
-    console.log('trying to find free port for spawn');
+    printLog('trying to find free port for spawn');
     mongoPort = mongoPort || 11235;
     const socket = new net.Socket()
         .once('connect', function () {
             socket.destroy();
-            freeport(++mongoPort, done);
+            ++mongoPort
+            freeport(done);
         })
         .once('error', function (/* err */) {
             socket.destroy();
@@ -186,12 +203,13 @@ function freeport(done) {
 }
 
 function freeportNode(done) {
-    console.log('trying to find free port for spawn');
+    printLog('trying to find free port for spawn');
     nodePort = nodePort || 8080;
     const socket = new net.Socket()
         .once('connect', function () {
             socket.destroy();
-            freeport(++nodePort, done);
+            ++nodePort
+            freeport(done);
         })
         .once('error', function (/* err */) {
             socket.destroy();
@@ -206,7 +224,7 @@ function startWebApp() {
             webServer = webApp.listen(nodePort, config.host, function () {
                 global.webServerRunning = true;
                 global.nodePort = nodePort;
-                console.log('Express server listening on http://' + config.host + ':' + nodePort);
+                printLog('Express server listening on http://' + config.host + ':' + nodePort);
                 sendToWin(win, 'webApp')
                 startModbus();
             });
@@ -220,7 +238,7 @@ function startWebApp() {
 function stopWebApp() {
     if(webServer && webServer.listening) {
         webServer.close();
-        console.log('Server closed.');
+        printLog('Server closed.');
         global.webServerRunning = false;
         sendToWin(win, 'webApp')
     } else {
@@ -233,23 +251,23 @@ function startModbus(restart) {
     if(restart) {
         try {
             modbusConnection.close();
-            console.log('connection closed')
+            printLog('connection closed')
         } catch(err) {}
     }
     try {
         clearInterval(modbusInterval);
-        console.log('interval closed')
+        printLog('interval closed')
     } catch(err) {}
     mongoose.models.Option.findOne({
         isDeleted: false,
         field: 'config'
     }).exec(function(err, item) {
         if(err || !item) {
-            console.log('Error fetching connection details')
-            global.modbusServerRunning = false;
+            printLog('Error fetching connection details')
+            global.modbusServerRunning = true;
             sendToWin(win, 'webApp')
         } else {
-            console.log(item.data.registers);
+            printLog(item.data.registers);
             modbus.tcp.connect(item.data.device.port, item.data.device.host, (err, connection) => {
                 modbusConnection = connection;
             });
@@ -257,32 +275,34 @@ function startModbus(restart) {
             global.modbusServerRunning = true;
             modbusInterval = setInterval(async function() {
 
-                console.log('Running modbus')
-                var input = {
-                    data: {},
-                    raw: {}
-                }
-                for(var i = 0; i < item.data.registers.length; i++) {
-                    var register = item.data.registers[i];
-                    try {
-                        const readValue = await readRegister(5, register.address);
-                        if(readValue != false) {
-                            input.data[register.key] = convertValue(register, readValue);
-                            input.raw[register.key] = readValue;
-                        } else {
-                            input.data[register.key] = -1;
-                            input.raw[register.key] = false;
-                        }
-                    } catch(err) {
-
+                printLog('Running modbus')
+                try {
+                    var input = {
+                        data: {},
+                        raw: {}
                     }
-                }
-                console.log(JSON.stringify(input));
-                new mongoose.models.Log({
-                    createdAt: new Date(),
-                    data: input.data,
-                    raw: input.raw
-                }).save();
+                    for(var i = 0; i < item.data.registers.length; i++) {
+                        var register = item.data.registers[i];
+                        try {
+                            const readValue = await readRegister(5, register.address);
+                            if(readValue != false) {
+                                input.data[register.key] = convertValue(register, readValue);
+                                input.raw[register.key] = readValue;
+                            } else {
+                                input.data[register.key] = -1;
+                                input.raw[register.key] = false;
+                            }
+                        } catch(err) {
+
+                        }
+                    }
+                    printLog(JSON.stringify(input));
+                    new mongoose.models.Log({
+                        createdAt: new Date(),
+                        data: input.data,
+                        raw: input.raw
+                    }).save();
+                } catch(err) {}
             }, item.data.device.interval * 1000)
             sendToWin(win, 'webApp')
         }
@@ -301,8 +321,8 @@ function stopModbus() {
     sendToWin(win, 'webApp')
 }
 
-function sendToWin(win, channel) {
-    win.webContents.send(channel);
+function sendToWin(win, channel, data) {
+    win.webContents.send(channel, data);
 }
 
 async function readRegister(deviceId, address) {
@@ -328,4 +348,11 @@ async function readRegister(deviceId, address) {
 function convertValue(register, readValue) {
     var diff = (register.values.max - register.values.min) / 65536;
     return register.values.min + (parseInt(`0x${readValue}`) * diff);
+}
+function printLog() {
+    // if(win) {
+    //     sendToWin(win, 'console.log', arguments)
+    // } else {
+    //     console.log(arguments);
+    // }
 }

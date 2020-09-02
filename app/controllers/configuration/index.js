@@ -10,13 +10,7 @@
  * prior written permission is obtained from RyDOT Infotech Pvt. Ltd.
 **/
 var mongoose = require('mongoose'),
-    _ = require('lodash'),
-    request = require('request'),
-    translation = require('../../libs/translation'),
-    ipAddress = require('../../libs/ipAddress'),
     responder = require('../../libs/responder'),
-    validationErrors = require('../../libs/validationErrors'),
-    config = require('../../../config/config'),
     ipcMain = require('electron').ipcMain;
 
 module.exports = {
@@ -78,11 +72,13 @@ async function put(req, res, next) {
     }, {
         $set: update
     }, {
-        upsert: true
-    }).exec(function(err) {
+        upsert: true,
+        new: true
+    }).exec(function(err, item) {
         if(err) {
             return responder.handleInternalError(res, err, next);
         } else {
+            ipcMain.emit('updateConfig', JSON.stringify(item));
             ipcMain.emit('restartModbus', true);
             return responder.success(res, {});
         }
