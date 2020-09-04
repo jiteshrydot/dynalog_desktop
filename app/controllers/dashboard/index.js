@@ -20,7 +20,10 @@ module.exports = {
 async function get(req, res, next) {
 
     var where = {
-        isDeleted: false
+        isDeleted: false,
+        data: {
+            $exists: true
+        }
     };
     mongoose.models.Log.findOne(where).sort({
         createdAt: -1
@@ -53,6 +56,9 @@ async function timeline(req, res, next) {
     }
     var where = {
         isDeleted: false,
+        data: {
+            $exists: true
+        },
         createdAt: {
             $gte: new Date(fromDate),
             $lte: new Date(toDate)
@@ -74,6 +80,9 @@ async function timeline(req, res, next) {
             },
             minute: {
                 $minute: '$time'
+            },
+            second: {
+                $second: '$time'
             }
         }
     }
@@ -83,18 +92,21 @@ async function timeline(req, res, next) {
         calculatedDate: {
             $sum: [
                 {
-                    $multiply: ['$_id.year', 100000000]
+                    $multiply: ['$_id.year', 10000000000]
                 },
                 {
-                    $multiply: ['$_id.month', 1000000]
+                    $multiply: ['$_id.month', 100000000]
                 },
                 {
-                    $multiply: ['$_id.date', 10000]
+                    $multiply: ['$_id.date', 1000000]
                 },
                 {
-                    $multiply: ['$_id.hour', 100]
+                    $multiply: ['$_id.hour', 10000]
                 },
-                '$_id.minute'
+                {
+                    $multiply: ['$_id.minute', 100]
+                },
+                '$_id.second'
             ]
         }
     };

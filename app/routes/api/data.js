@@ -13,5 +13,6 @@ const router = require('express').Router(),
     data = require('../../controllers/data');
 
 router.post('/get', data.get);
+router.post('/download', data.download);
 
 module.exports = router

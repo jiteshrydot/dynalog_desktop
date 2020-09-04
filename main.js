@@ -14,7 +14,7 @@ const path = require('path');
 const url = require('url');
 const Store = require('electron-store');
 // const { machineIdSync } = require('node-machine-id');
-const getmac = require('getmac');
+const macaddress = require('macaddress');
 const shell = require('shelljs');
 const net = require('net');
 const spawn = require('child_process').spawn;
@@ -59,30 +59,39 @@ if (process.platform === 'darwin') {
 const menu = Menu.buildFromTemplate([])
 Menu.setApplicationMenu(menu)
 
-global.macId = getmac.default();
 global.config = config;
 
 app.on('ready', function() {
-    win = new BrowserWindow({
-        width: 960,
-        minWidth: 960,
-        height: 600,
-        webPreferences: {
-            webSecurity: false,
-            nodeIntegration: true,
-            webviewTag: true
+    global.macIds = []
+    macaddress.all().then(function(addresses) {
+        for(i in addresses) {
+            var mac = addresses[i].mac.toString().toLowerCase();
+            if(global.macIds.indexOf(mac) < 0) {
+                global.macIds.push(mac)
+            }
         }
+
+        win = new BrowserWindow({
+            width: 960,
+            minWidth: 960,
+            height: 600,
+            webPreferences: {
+                webSecurity: false,
+                nodeIntegration: true,
+                webviewTag: true
+            }
+        });
+        win.webContents.openDevTools();
+        win.loadURL(url.format({
+            pathname: path.join(__dirname, 'electron/main.html'),
+            protocol: 'file:',
+            slashes: true
+        }));
+        win.on('closed', () => {
+            win = null
+        });
+        startMongoNow();
     });
-    win.webContents.openDevTools();
-    win.loadURL(url.format({
-        pathname: path.join(__dirname, 'electron/main.html'),
-        protocol: 'file:',
-        slashes: true
-    }));
-    win.on('closed', () => {
-        win = null
-    });
-    startMongoNow();
 });
 app.on('window-all-closed', () => {
     closeApp();
