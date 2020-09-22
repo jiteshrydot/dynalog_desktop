@@ -1,19 +1,29 @@
 var modbus = require("modbus-stream");
-
-setTimeout(function(){
-    modbus.tcp.connect(502, "192.168.2.230", (err, connection) => {
-        connection.readInputRegisters({
-            address: 3,
-            quantity: 1,
-            extra: {
-                unitId: 5
-            }
-        }, function(err, resp) {
-            if(!err) {
-                console.log(resp.response.data[0].toString('hex'))
-            } else {
-                console.log(err)
-            }
-        })
+var conn = null;
+connectModubs();
+function connectModubs() {
+    modbus.tcp.connect(502, "192.168.2.231", (err, connection) => {
+        if(!err) {
+            conn = connection;
+            conn.on('error', function() {
+                connectModubs();
+            })
+        }
     });
+}
+console.log(conn);
+setInterval(function(){
+    conn.readHoldingRegisters({
+        address: 40000,
+        quantity: 10,
+        extra: {
+            unitId: 10
+        }
+    }, function(err, resp) {
+        if(!err) {
+            console.log(resp.response.data.map(d => d.toString('hex')))
+        } else {
+            console.log(err)
+        }
+    })
 }, 2000);

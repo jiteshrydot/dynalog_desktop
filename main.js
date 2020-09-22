@@ -9,7 +9,7 @@
  * copyright law. Dissemination of this information or reproduction of this material is strictly forbidden unless
  * prior written permission is obtained from RyDOT Infotech Pvt. Ltd.
 **/
-const { app, BrowserWindow, ipcMain, session, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, session, screen, Menu } = require('electron');
 const path = require('path');
 const url = require('url');
 const Store = require('electron-store');
@@ -33,7 +33,8 @@ let express = require('express'),
     mongoPort = null,
     nodePort = null,
     webApp = null,
-    logFilePath = null;
+    logFilePath = null,
+    interfaces = require('os').networkInterfaces();
 
 printLog('defining templates');
 
@@ -60,28 +61,52 @@ const menu = Menu.buildFromTemplate([])
 Menu.setApplicationMenu(menu)
 
 global.config = config;
+global.noReadings = false;
+
+const gotTheLock = app.requestSingleInstanceLock()
+if(!gotTheLock) {
+    app.quit();
+    return;
+}
+
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+    if (win) {
+        if (win.isMinimized()) win.restore()
+        win.focus()
+    }
+})
 
 app.on('ready', function() {
     global.macIds = []
-    macaddress.all().then(function(addresses) {
-        for(i in addresses) {
-            var mac = addresses[i].mac.toString().toLowerCase();
-            if(global.macIds.indexOf(mac) < 0) {
-                global.macIds.push(mac)
-            }
+    // macaddress.all().then(function(addresses) {
+        console.log(interfaces)
+        for(i in interfaces) {
+            interfaces[i].forEach(function(intr) {
+                var mac = intr.mac.toString().toLowerCase();
+                if(global.macIds.indexOf(mac) < 0) {
+                    global.macIds.push(mac)
+                }
+            });
         }
 
+        console.log(global.macIds);
+
+        const size = screen.getPrimaryDisplay().workAreaSize;
+
         win = new BrowserWindow({
-            width: 960,
-            minWidth: 960,
-            height: 600,
+            x: 0,
+            y: 0,
+            width: size.width,
+            height: size.height,
+            minWidth: 600,
+            icon: path.join(__dirname, 'icons/logo.png'),
             webPreferences: {
                 webSecurity: false,
                 nodeIntegration: true,
                 webviewTag: true
             }
         });
-        win.webContents.openDevTools();
+        // win.webContents.openDevTools();
         win.loadURL(url.format({
             pathname: path.join(__dirname, 'electron/main.html'),
             protocol: 'file:',
@@ -91,7 +116,7 @@ app.on('ready', function() {
             win = null
         });
         startMongoNow();
-    });
+    // });
 });
 app.on('window-all-closed', () => {
     closeApp();
@@ -256,6 +281,35 @@ function stopWebApp() {
     }
 }
 
+async function connectModubs(item) {
+    return new Promise(function(resolve, reject) {
+        const timout = setTimeout(function() {
+            reject();
+        }, 2000);
+        modbus.tcp.connect(item.data.device.port, item.data.device.host, (err, connection) => {
+            if(!err) {
+                clearTimeout(timout);
+                modbusConnection = connection;
+                resolve();
+                connection.on('error', function() {
+                    console.log('error on connection');
+                    disconnectModubs();
+                    // connectModubs(item);
+                })
+            }
+        });
+    });
+}
+
+function disconnectModubs(item) {
+    if(modbusConnection) {
+        try {
+            modbusConnection.close();
+            modbusConnection = null;
+        } catch(err) {}
+    }
+}
+
 function startModbus(restart) {
     if(restart) {
         try {
@@ -277,12 +331,18 @@ function startModbus(restart) {
             sendToWin(win, 'webApp')
         } else {
             printLog(item.data.registers);
-            modbus.tcp.connect(item.data.device.port, item.data.device.host, (err, connection) => {
-                modbusConnection = connection;
-            });
 
             global.modbusServerRunning = true;
             modbusInterval = setInterval(async function() {
+                console.log('Interval started');
+                try {
+                    await connectModubs(item);
+                    console.log('Modbus connected')
+                } catch(err) {
+                    console.log('Internal Error 1')
+                    console.log(err)
+                }
+                console.log('Try catch ended');
 
                 printLog('Running modbus')
                 try {
@@ -290,28 +350,59 @@ function startModbus(restart) {
                         data: {},
                         raw: {}
                     }
+                    var shouldInsert = false;
                     for(var i = 0; i < item.data.registers.length; i++) {
                         var register = item.data.registers[i];
                         try {
-                            const readValue = await readRegister(5, register.address);
+                            const readValue = await readRegister(5, register.address, register.type);
                             if(readValue != false) {
-                                input.data[register.key] = convertValue(register, readValue);
+                                input.data[register.key] = convertValue(register, readValue) * (register.multiplier || 1);
+                                if(convertValue(register, readValue) < 0) {
+                                    input.data[register.key] = 0;
+                                }
+                                if(register.key == 'WIND_SPEED' && convertValue(register, readValue) < 0.06) {
+                                    input.data[register.key] = 0;
+                                }
                                 input.raw[register.key] = readValue;
+                                shouldInsert = true;
                             } else {
-                                input.data[register.key] = -1;
+                                // input.data[register.key] = -1;
                                 input.raw[register.key] = false;
                             }
                         } catch(err) {
-
+                            console.log(err);
                         }
                     }
-                    printLog(JSON.stringify(input));
-                    new mongoose.models.Log({
-                        createdAt: new Date(),
-                        data: input.data,
-                        raw: input.raw
-                    }).save();
-                } catch(err) {}
+                    if(shouldInsert) {
+                        printLog(JSON.stringify(input));
+                        const toSave = new mongoose.models.Log({
+                            createdAt: new Date(),
+                            data: input.data,
+                            raw: input.raw
+                        })
+                        toSave.save(function() {
+                            disconnectModubs();
+                            global.noReadings = false;
+                            sendToWin(win, 'newData', {
+                                _id: toSave._id.toString(),
+                                createdAt: new Date(),
+                                data: toSave.data,
+                                raw: toSave.raw
+                            });
+                        });
+                    } else {
+                        console.log('Nothing to insert')
+                        disconnectModubs();
+                        global.noReadings = true;
+                        sendToWin(win, 'readingStatus', 'off');
+                    }
+                } catch(err) {
+                    console.log('Internal Error')
+                    disconnectModubs();
+                    global.noReadings = true;
+                    sendToWin(win, 'readingStatus', 'off');
+                }
+            // }, 5000)
             }, item.data.device.interval * 1000)
             sendToWin(win, 'webApp')
         }
@@ -331,32 +422,62 @@ function stopModbus() {
 }
 
 function sendToWin(win, channel, data) {
-    win.webContents.send(channel, data);
+    if(win) {
+        win.webContents.send(channel, data);
+    }
 }
 
-async function readRegister(deviceId, address) {
+async function readRegister(deviceId, address, type) {
 
     return new Promise(function(resolve) {
-        
-        modbusConnection.readInputRegisters({
-            address: address,
-            quantity: 1,
-            extra: {
-                unitId: deviceId
-            }
-        }, function(err, resp) {
-            if(!err) {
-                resolve(resp.response.data[0].toString('hex'))
+        try {
+            if(modbusConnection) {
+                let fn = 'readInputRegisters';
+                if(type) {
+                    switch(type) {
+                        case 'input':
+                            fn = 'readInputRegisters';
+                            break;
+                        case 'discrete':
+                            fn = 'readDiscreteInputs';
+                            break;
+                        case 'coil':
+                            fn = 'readCoils';
+                            break;
+                        case 'holding':
+                            fn = 'readHoldingRegisters';
+                            break;
+                        default:
+                            fn = 'readInputRegisters';
+                            break;                            
+                    }
+                }
+                modbusConnection[fn]({
+                    address: parseInt(address) - 1,
+                    quantity: 1,
+                    extra: {
+                        unitId: deviceId
+                    }
+                }, function(err, resp) {
+                    if(!err) {
+                        resolve(resp.response.data[0].toString('hex'))
+                    } else {
+                        resolve(false);
+                    }
+                })
             } else {
                 resolve(false);
             }
-        })
+        } catch(err) {
+            resolve(false);
+        }
     });
 }
 
 function convertValue(register, readValue) {
-    var diff = (register.values.max - register.values.min) / 65536;
-    return register.values.min + (parseInt(`0x${readValue}`) * diff);
+    return (parseInt(`0x${readValue}`) * 10 / 65536) - 5;
+    // var diff = (register.values.max - register.values.min) / 65536;
+    // return register.values.min + (parseInt(`0x${readValue}`) * diff);
 }
 function printLog() {
     // if(win) {

@@ -34,11 +34,13 @@ async function get(req, res, next) {
         } else if(item) {
             return responder.success(res, {
                 item: item.data,
-                createdAt: item.createdAt
+                createdAt: item.createdAt,
+                noReadings: global.noReadings
             });
         } else {
             return responder.success(res, {
-                item: {}
+                item: {},
+                noReadings: global.noReadings
             });
         }
     });

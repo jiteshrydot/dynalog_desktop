@@ -36,7 +36,7 @@ async function get(req, res, next) {
                     device: {
                         host: '',
                         port: 0,
-                        interval: 10
+                        interval: 60
                     },
                     registers: []
                 }
