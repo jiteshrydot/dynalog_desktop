@@ -17,7 +17,7 @@ const Store = require('electron-store');
 const macaddress = require('macaddress');
 const shell = require('shelljs');
 const net = require('net');
-const spawn = require('child_process').spawn;
+const { execSync, spawn } = require('child_process');
 const store = new Store();
     
 let express = require('express'),
@@ -34,7 +34,7 @@ let express = require('express'),
     nodePort = null,
     webApp = null,
     logFilePath = null,
-    interfaces = require('os').networkInterfaces();
+    macRE = /([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})|([0-9a-fA-F]{4}\\.[0-9a-fA-F]{4}\\.[0-9a-fA-F]{4})$/;;
 
 printLog('defining templates');
 
@@ -79,15 +79,15 @@ app.on('second-instance', (event, commandLine, workingDirectory) => {
 app.on('ready', function() {
     global.macIds = []
     // macaddress.all().then(function(addresses) {
-        console.log(interfaces)
-        for(i in interfaces) {
-            interfaces[i].forEach(function(intr) {
-                var mac = intr.mac.toString().toLowerCase();
+        execSync('ipconfig /all').toString().split('\r\n').forEach(item => {
+            var matches = macRE.exec(item);
+            if(matches && matches.length > 0) {
+                var mac = matches[0].replace(/-/g, ':').toLowerCase();
                 if(global.macIds.indexOf(mac) < 0) {
                     global.macIds.push(mac)
                 }
-            });
-        }
+            }
+        });
 
         console.log(global.macIds);
 

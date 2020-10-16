@@ -19,11 +19,11 @@ ipc.on('webApp', initApp)
 ipc.on('console.log', console.log)
 
 function initApp() {
-    // if(remote.getGlobal('macIds').indexOf(remote.getGlobal('config').macId.toString().toLowerCase()) < 0) {
-    //     alert('This application is not compatible with this device');
-    //     ipc.send('closeApp');
-    //     return false;
-    // }
+    if(remote.getGlobal('macIds').indexOf(remote.getGlobal('config').macId.toString().toLowerCase()) < 0) {
+        alert('This application is not compatible with this device');
+        ipc.send('closeApp');
+        return false;
+    }
     // let nodeJSPortion = ``;
     // if(remote.getGlobal('webServerRunning')) {
     //     // nodeJSPortion = `<div>
@@ -57,8 +57,8 @@ function initApp() {
     // statusDiv.innerHTML = html;
 
     if(remote.getGlobal('webServerRunning') && remote.getGlobal('modbusServerRunning')) {
-        location.href = `http://localhost:4200`;
-        // location.href = `http://localhost:${remote.getGlobal('nodePort')}`;
+        // location.href = `http://localhost:4200`;
+        location.href = `http://localhost:${remote.getGlobal('nodePort')}`;
     }
 
 }
