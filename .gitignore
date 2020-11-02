@@ -1,7 +1,7 @@
 node_modules/
 dist/*
 bin/*
-Dynalog-win32-x64/*
+Dynalog-win32-*/*
 installer/*
 steps
 uploads/*
