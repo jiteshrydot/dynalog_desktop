@@ -9,7 +9,7 @@
  * copyright law. Dissemination of this information or reproduction of this material is strictly forbidden unless
  * prior written permission is obtained from RyDOT Infotech Pvt. Ltd.
 **/
-var mongoose = require('mongoose'),
+var sequelize = require('sequelize'),
     responder = require('../../libs/responder'),
     ipcMain = require('electron').ipcMain;
 
@@ -19,17 +19,15 @@ module.exports = {
 };
 
 async function get(req, res, next) {
-    mongoose.models.Option.findOne({
+    req.app.sequelize.models.Option.findOne({
         isDeleted: false,
         field: 'config'
-    }).exec(function(err, item) {
-        if(err) {
-            return responder.handleInternalError(res, err, next);
-        } else if(!item) {
-            const item = new mongoose.models.Option({
+    }).then(function(item) {
+        if(!item) {
+            req.app.sequelize.models.Option.create({
                 isDeleted: false,
                 field: 'config',
-                data: {
+                data: JSON.stringify({
                     dateFormat: 'medium',
                     deviceId: 5,
                     addressLength: 1,
@@ -39,48 +37,49 @@ async function get(req, res, next) {
                         interval: 60
                     },
                     registers: []
-                }
-            });
-            item.save(function(err) {
-                if(err) {
-                    return responder.handleInternalError(res, err, next);
-                } else {
-                    return responder.success(res, {
-                        item: item.data
-                    });
-                }
+                })
+            }).then(function(item) {
+                return responder.success(res, {
+                    item: JSON.parse(item.data)
+                });
+            }).catch(function(err) {
+                return responder.handleInternalError(res, err, next);
             });
         } else {
             return responder.success(res, {
-                item: item.data
+                item: JSON.parse(item.data)
             });
         }
+    }).catch(function(err) {
+        return responder.handleInternalError(res, err, next);
     });
 }
 
 async function put(req, res, next) {
-    var update = {};
-    update['data.dateFormat'] = req.body.dateFormat;
-    update['data.deviceId'] = req.body.deviceId;
-    update['data.addressLength'] = req.body.addressLength;
-    update['data.device'] = req.body.device;
-    update['data.registers'] = req.body.registers;
+    var data = {};
+    data.dateFormat = req.body.dateFormat;
+    data.deviceId = req.body.deviceId;
+    data.addressLength = req.body.addressLength;
+    data.device = req.body.device;
+    data.registers = req.body.registers;
 
-    mongoose.models.Option.findOneAndUpdate({
-        isDeleted: false,
-        field: 'config'
+    console.log(data)
+    console.log(JSON.parse(JSON.stringify(await req.app.sequelize.models.Option.findAll())));
+    req.app.sequelize.models.Option.update({
+        data: JSON.stringify(data)
     }, {
-        $set: update
-    }, {
-        upsert: true,
-        new: true
-    }).exec(function(err, item) {
-        if(err) {
-            return responder.handleInternalError(res, err, next);
-        } else {
-            ipcMain.emit('updateConfig', JSON.stringify(item));
-            ipcMain.emit('restartModbus', true);
-            return responder.success(res, {});
+        where: {
+          field: 'config'
         }
+    }).then(function(item) {
+        console.log(item)
+        ipcMain.emit('updateConfig', JSON.stringify({
+            field: 'config',
+            data: data
+        }));
+        ipcMain.emit('restartModbus', true);
+        return responder.success(res, {});
+    }).catch(function(err) {
+        return responder.handleInternalError(res, err, next);
     });
 }

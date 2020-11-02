@@ -10,6 +10,7 @@
  * prior written permission is obtained from RyDOT Infotech Pvt. Ltd.
 **/
 var mongoose = require('mongoose'),
+    { Op } = require('sequelize'),
     responder = require('../../libs/responder');
 
 module.exports = {
@@ -26,7 +27,7 @@ async function get(req, res, next) {
     var where = {
         isDeleted: false,
         data: {
-            $exists: true
+            [Op.not]: null
         },
         createdAt: {}
     };
@@ -34,43 +35,34 @@ async function get(req, res, next) {
     try {
         var start = new Date(startDate);
         var end = new Date(endDate);
-
-        if(start instanceof Date && !isNaN(start))
-            where.createdAt.$gte = start;
-        
-        if(end instanceof Date && !isNaN(end))
-            where.createdAt.$lte = end;
+        if(isNaN(start))
+            start = new Date(0)
+        if(isNaN(end))
+            end = new Date()
+        where.createdAt = {
+            [Op.between]: [start, end]
+        }
     } catch(ex) {}
 
-    if(Object.keys(where.createdAt).length === 0) {
-        delete where.createdAt;
-    }
-
-    console.log(where)
-
-    mongoose.models.Log.count(where).exec(function (err, c) {
-
-        if(err) {
-            return handleInternalError(res, err, next);
-        } else if(c === 0) {
-            return responder.success(res, {
-                list: [],
-                count: 0
-            });
-        } else {
-
-            mongoose.models.Log.find(where).sort({createdAt: -1}).limit(limit).skip(skip).exec(function (err, items) {
-
-                if(err) {
-                    return handleInternalError(res, err, next);
-                } else {
-                    return responder.success(res, {
-                        list: items,
-                        count: c
-                    });
+    req.app.sequelize.models.Log.findAndCountAll({
+        where: where,
+        order: [
+            ['createdAt', 'DESC']
+        ],
+        offset: skip,
+        limit: limit
+    }).then(function (result) {
+        return responder.success(res, {
+            list: result.rows.map(function(row) {
+                return {
+                    data: JSON.parse(row.data),
+                    createdAt: row.createdAt
                 }
-            });
-        }
+            }),
+            count: result.count
+        });
+    }).catch(function(err) {
+        return handleInternalError(res, err, next);
     });
 }
 
@@ -83,7 +75,7 @@ async function download(req, res, next) {
     var where = {
         isDeleted: false,
         data: {
-            $exists: true
+            [Op.not]: null
         },
         createdAt: {}
     };
@@ -91,32 +83,36 @@ async function download(req, res, next) {
     try {
         var start = new Date(startDate);
         var end = new Date(endDate);
-
-        if(start instanceof Date && !isNaN(start))
-            where.createdAt.$gte = start;
-        
-        if(end instanceof Date && !isNaN(end))
-            where.createdAt.$lte = end;
+        if(isNaN(start))
+            start = new Date(0)
+        if(isNaN(end))
+            end = new Date()
+        where.createdAt = {
+            [Op.between]: [start, end]
+        }
     } catch(ex) {}
 
-    if(Object.keys(where.createdAt).length === 0) {
-        delete where.createdAt;
-    }
-
-    mongoose.models.Log.find(where).sort({createdAt: -1}).exec(function (err, items) {
-
-        if(err) {
-            return handleInternalError(res, err, next);
-        } else {
-            var text = ``;//`createdAt,${keys.join(',')}`;
-            items.forEach(function(item) {
-                text += `\n${new Date(item.createdAt.getTime() + tzOffset).toISOString().substring(0, 19).replace('T', ' ')},` + keys.map(function(key) {
-                    return item.data[key] || '';
-                }).join(',');
-            });
-            return responder.success(res, {
-                text: text
-            })
-        }
+    req.app.sequelize.models.Log.findAll({
+        where: where,
+        order: [
+            ['createdAt', 'DESC']
+        ]
+    }).then(function (items) {
+        var text = ``;//`createdAt,${keys.join(',')}`;
+        items.map(function(item) {
+            return {
+                createdAt: item.createdAt,
+                data: JSON.parse(item.data)
+            }
+        }).forEach(function(item) {
+            text += `\n${new Date(item.createdAt.getTime() + tzOffset).toISOString().substring(0, 19).replace('T', ' ')},` + keys.map(function(key) {
+                return item.data[key] || '';
+            }).join(',');
+        });
+        return responder.success(res, {
+            text: text
+        });
+    }).catch(function(err) {
+        return handleInternalError(res, err, next);
     });
 }

@@ -9,7 +9,7 @@
  * copyright law. Dissemination of this information or reproduction of this material is strictly forbidden unless
  * prior written permission is obtained from RyDOT Infotech Pvt. Ltd.
 **/
-var mongoose = require('mongoose'),
+const { Op } = require('sequelize'),
     responder = require('../../libs/responder');
 
 module.exports = {
@@ -20,20 +20,21 @@ module.exports = {
 async function get(req, res, next) {
 
     var where = {
-        isDeleted: false,
         data: {
-            $exists: true
+            [Op.not]: null
         }
     };
-    mongoose.models.Log.findOne(where).sort({
-        createdAt: -1
-    }).exec(function (err, item) {
+    var order = [
+        ['createdAt', 'DESC']
+    ]
+    req.app.sequelize.models.Log.findOne({
+        where: where,
+        order: order
+    }).then(function (item) {
 
-        if(err) {
-            return handleInternalError(res, err, next);
-        } else if(item) {
+        if(item) {
             return responder.success(res, {
-                item: item.data,
+                item: JSON.parse(item.data),
                 createdAt: item.createdAt,
                 noReadings: global.noReadings
             });
@@ -43,6 +44,8 @@ async function get(req, res, next) {
                 noReadings: global.noReadings
             });
         }
+    }).catch(function(err) {
+        return handleInternalError(res, err, next);
     });
 }
 
@@ -59,101 +62,132 @@ async function timeline(req, res, next) {
     var where = {
         isDeleted: false,
         data: {
-            $exists: true
+            [Op.not]: null
         },
         createdAt: {
-            $gte: new Date(fromDate),
-            $lte: new Date(toDate)
+            [Op.between]: [new Date(fromDate), new Date(toDate)]
         }
     };
-    var $group = {
-        _id: {
-            date: {
-                $dayOfMonth: '$time'
-            },
-            month: {
-                $month: '$time'
-            },
-            year: {
-                $year: '$time'
-            },
-            hour: {
-                $hour: '$time'
-            },
-            minute: {
-                $minute: '$time'
-            },
-            second: {
-                $second: '$time'
-            }
-        }
-    }
-    var $project = {
-        _id: 0,
-        date: '$_id',
-        calculatedDate: {
-            $sum: [
-                {
-                    $multiply: ['$_id.year', 10000000000]
-                },
-                {
-                    $multiply: ['$_id.month', 100000000]
-                },
-                {
-                    $multiply: ['$_id.date', 1000000]
-                },
-                {
-                    $multiply: ['$_id.hour', 10000]
-                },
-                {
-                    $multiply: ['$_id.minute', 100]
-                },
-                '$_id.second'
-            ]
-        }
-    };
-    req.body.registers.filter(reg => reg != '_id').forEach(function(reg) {
-        $group[reg] = {
-            $avg: `$data.${reg}`
-        };
-        $project[reg] = 1;
-    });
-    mongoose.models.Log.aggregate([
-        {
-            $match: where
-        },
-        {
-            $project: {
-                _id: 0,
-                data: 1,
-                time: {
-                    $add: ['$createdAt', tzOffset]
+    // var $group = {
+    //     _id: {
+    //         date: {
+    //             $dayOfMonth: '$time'
+    //         },
+    //         month: {
+    //             $month: '$time'
+    //         },
+    //         year: {
+    //             $year: '$time'
+    //         },
+    //         hour: {
+    //             $hour: '$time'
+    //         },
+    //         minute: {
+    //             $minute: '$time'
+    //         },
+    //         second: {
+    //             $second: '$time'
+    //         }
+    //     }
+    // }
+    // var $project = {
+    //     _id: 0,
+    //     date: '$_id',
+    //     calculatedDate: {
+    //         $sum: [
+    //             {
+    //                 $multiply: ['$_id.year', 10000000000]
+    //             },
+    //             {
+    //                 $multiply: ['$_id.month', 100000000]
+    //             },
+    //             {
+    //                 $multiply: ['$_id.date', 1000000]
+    //             },
+    //             {
+    //                 $multiply: ['$_id.hour', 10000]
+    //             },
+    //             {
+    //                 $multiply: ['$_id.minute', 100]
+    //             },
+    //             '$_id.second'
+    //         ]
+    //     }
+    // };
+    // req.body.registers.filter(reg => reg != '_id').forEach(function(reg) {
+    //     $group[reg] = {
+    //         $avg: `$data.${reg}`
+    //     };
+    //     $project[reg] = 1;
+    // });
+    req.app.sequelize.models.Log.findAll({
+        where: where,
+        group: ['createdAt'],
+        order: [
+            ['createdAt', 'ASC']
+        ]
+    }).then(function(items) {
+        var out = [];
+        items.forEach(function(item) {
+            var parsed = JSON.parse(item.data);
+            var date = new Date(item.createdAt.getTime() + tzOffset).toISOString();
+            var insert = {
+                date: {
+                    year: parseInt(date.slice(0, 4)),
+                    month: parseInt(date.slice(5, 7)),
+                    date: parseInt(date.slice(8, 10)),
+                    hour: parseInt(date.slice(11, 13)),
+                    minute: parseInt(date.slice(14, 16)),
+                    second: parseInt(date.slice(17, 19))
                 }
-            }
-        },
-        {
-            $group: $group
-        },
-        {
-            $project: $project
-        },
-        {
-            $sort: {
-                calculatedDate: 1
-            }
-        }
-    ]).exec(function (err, items) {
-
-        if(err) {
-            return responder.handleInternalError(res, err, next);
-        } else if(items.length > 0) {
-            return responder.success(res, {
-                list: items
+            };
+            req.body.registers.filter(reg => reg != '_id').forEach(function(reg) {
+                insert[reg] = parsed[reg] || null;
             });
-        } else {
-            return responder.success(res, {
-                list: []
-            });
-        }
+            out.push(insert)
+        })
+        return responder.success(res, {
+            list: out
+        });
+    }).catch(function(err) {
+        return responder.handleInternalError(res, err, next);
     });
+    // mongoose.models.Log.aggregate([
+    //     {
+    //         $match: where
+    //     },
+    //     {
+    //         $project: {
+    //             _id: 0,
+    //             data: 1,
+    //             time: {
+    //                 $add: ['$createdAt', tzOffset]
+    //             }
+    //         }
+    //     },
+    //     {
+    //         $group: $group
+    //     },
+    //     {
+    //         $project: $project
+    //     },
+    //     {
+    //         $sort: {
+    //             calculatedDate: 1
+    //         }
+    //     }
+    // ]).exec(function (err, items) {
+
+    //     if(err) {
+    //         return responder.handleInternalError(res, err, next);
+    //     } else if(items.length > 0) {
+    //         return responder.success(res, {
+    //             list: items
+    //         });
+    //     } else {
+    //         return responder.success(res, {
+    //             list: []
+    //         });
+    //     }
+    // });
 }

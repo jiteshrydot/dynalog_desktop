@@ -10,27 +10,22 @@
  * prior written permission is obtained from RyDOT Infotech Pvt. Ltd.
 **/
 // Log Model
-var mongoose = require('mongoose'),
-	Schema = mongoose.Schema;
+const { DataTypes } = require("sequelize");
 
-var LogSchema = new Schema({
-	data: {
-		type: Schema.Types.Mixed,
-		index: true,
-        default: {}
-    },
-	raw: {
-		type: Schema.Types.Mixed,
-        default: {}
-	},
-	isDeleted: {
-		type: Boolean,
-		default: false
-	},
-	createdAt: {
-		type: Date,
-		default: new Date()
-	}
-});
-
-module.exports = mongoose.model('Log', LogSchema);
+module.exports = function(sequelize) {
+	const Log = sequelize.define('Log', {
+		data: {
+			type: DataTypes.TEXT
+		},
+		raw: {
+			type: DataTypes.TEXT
+		},
+		isDeleted: {
+			type: DataTypes.BOOLEAN
+		},
+		createdAt: {
+			type: DataTypes.DATE
+		}
+	});
+	Log.sync();
+};

@@ -24,7 +24,8 @@ let express = require('express'),
     config = require('./config/config'),
     glob = require('glob'),
     fs = require('fs'),
-    mongoose = require('mongoose'),
+    sequelize = null,
+    { Sequelize } = require('sequelize'),
     modbus = require('modbus-stream'),
     modbusConnection = null,
     modbusInterval = null,
@@ -166,9 +167,14 @@ function startMongoNow() {
     printLog('detected mongod data directory: ' + dataDir);
     printLog('trying to create data dir and removing mongod.lock just in case');
     shell.mkdir('-p', dataDir);
-    shell.rm('-f', lockfile);
+    // shell.rm('-f', lockfile);
+    sequelize = new Sequelize({
+        dialect: 'sqlite',
+        storage: path.join(dataDir, 'database.sqlite3')
+    });
+    startNodeNow();
 
-    freeport(function () {
+    /* freeport(function () {
         printLog('trying to spawn mongod process with port: ' + mongoPort);
         mongoProcess = spawn(mongoExe, [
             '--dbpath', dataDir,
@@ -192,28 +198,17 @@ function startMongoNow() {
         mongoProcess.on('exit', function (code) {
             // printLog('[MONGOD-EXIT]', code.toString());
         });
-    });
+    }); */
 }
 
 function startNodeNow() {
-    mongoose.Promise = global.Promise;
-
-    connectMongo();
-
-    mongoose.connection.on('disconnected', connectMongo);
-
-    function connectMongo() {
-        mongoose.connect(`mongodb://127.0.0.1:${mongoPort}/dynalog`, {
-            useCreateIndex: true,
-            useNewUrlParser: true
-        });
-    }
 
     webApp = express();
+    webApp.sequelize = sequelize;
 
     var models = glob.sync(config.root + '/app/models/*.js');
     models.forEach(function (model, i) {
-        require(model);
+        require(model)(sequelize);
     });
 
     require('./config/express')(webApp, config);
@@ -321,15 +316,16 @@ function startModbus(restart) {
         clearInterval(modbusInterval);
         printLog('interval closed')
     } catch(err) {}
-    mongoose.models.Option.findOne({
+    sequelize.models.Option.findOne({
         isDeleted: false,
         field: 'config'
-    }).exec(function(err, item) {
-        if(err || !item) {
+    }).then(function(item) {
+        if(!item) {
             printLog('Error fetching connection details')
             global.modbusServerRunning = true;
             sendToWin(win, 'webApp')
         } else {
+            item.data = JSON.parse(item.data);
             printLog(item.data.registers);
 
             global.modbusServerRunning = true;
@@ -375,21 +371,20 @@ function startModbus(restart) {
                     }
                     if(shouldInsert) {
                         printLog(JSON.stringify(input));
-                        const toSave = new mongoose.models.Log({
+                        sequelize.models.Log.create({
                             createdAt: new Date(),
-                            data: input.data,
-                            raw: input.raw
-                        })
-                        toSave.save(function() {
+                            data: JSON.stringify(input.data),
+                            raw: JSON.stringify(input.raw)
+                        }).then(function(_id) {
                             disconnectModubs();
                             global.noReadings = false;
                             sendToWin(win, 'newData', {
-                                _id: toSave._id.toString(),
+                                _id: _id.toString(),
                                 createdAt: new Date(),
-                                data: toSave.data,
-                                raw: toSave.raw
+                                data: input.data,
+                                raw: input.raw
                             });
-                        });
+                        }).catch(function(err) {});
                     } else {
                         console.log('Nothing to insert')
                         disconnectModubs();
@@ -406,6 +401,10 @@ function startModbus(restart) {
             }, item.data.device.interval * 1000)
             sendToWin(win, 'webApp')
         }
+    }).catch(function(err) {
+        printLog('Error fetching connection details')
+        global.modbusServerRunning = true;
+        sendToWin(win, 'webApp')
     })
 }
 

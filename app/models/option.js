@@ -10,26 +10,23 @@
  * prior written permission is obtained from RyDOT Infotech Pvt. Ltd.
 **/
 // Option Model
-var mongoose = require('mongoose'),
-	Schema = mongoose.Schema;
 
-var OptionSchema = new Schema({
-	field: {
-		type: String,
-        default: ''
-    },
-	data: {
-		type: Schema.Types.Mixed,
-        default: {}
-    },
-    isDeleted: {
-        type: Boolean,
-        default: false
-    },
-	createdAt: {
-		type: Date,
-		default: new Date()
-	}
-});
+const { DataTypes } = require("sequelize");
 
-module.exports = mongoose.model('Option', OptionSchema);
+module.exports = function(sequelize) {
+	const Option = sequelize.define('Option', {
+		data: {
+			type: DataTypes.TEXT
+		},
+		field: {
+			type: DataTypes.TEXT
+		},
+		isDeleted: {
+			type: DataTypes.BOOLEAN
+		},
+		createdAt: {
+			type: DataTypes.DATE
+		}
+	});
+	Option.sync();
+};
