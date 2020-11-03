@@ -1,7 +1,7 @@
 const { MSICreator } = require('electron-wix-msi');
 const path = require('path');
 
-const APP_DIR = path.join(__dirname, './Dynalog-win32-x64');
+const APP_DIR = path.join(__dirname, './Dynalog-win32-ia32');
 const OUT_DIR = path.join(__dirname, './installer');
 
 const msiCreator = new MSICreator({

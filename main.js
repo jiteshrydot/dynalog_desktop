@@ -325,6 +325,7 @@ function startModbus(restart) {
             global.modbusServerRunning = true;
             sendToWin(win, 'webApp')
         } else {
+            item = item.toJSON();
             item.data = JSON.parse(item.data);
             printLog(item.data.registers);
 
@@ -373,6 +374,7 @@ function startModbus(restart) {
                         printLog(JSON.stringify(input));
                         sequelize.models.Log.create({
                             createdAt: new Date(),
+                            isDeleted: false,
                             data: JSON.stringify(input.data),
                             raw: JSON.stringify(input.raw)
                         }).then(function(_id) {
