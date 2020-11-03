@@ -68,58 +68,6 @@ async function timeline(req, res, next) {
             [Op.between]: [new Date(fromDate), new Date(toDate)]
         }
     };
-    // var $group = {
-    //     _id: {
-    //         date: {
-    //             $dayOfMonth: '$time'
-    //         },
-    //         month: {
-    //             $month: '$time'
-    //         },
-    //         year: {
-    //             $year: '$time'
-    //         },
-    //         hour: {
-    //             $hour: '$time'
-    //         },
-    //         minute: {
-    //             $minute: '$time'
-    //         },
-    //         second: {
-    //             $second: '$time'
-    //         }
-    //     }
-    // }
-    // var $project = {
-    //     _id: 0,
-    //     date: '$_id',
-    //     calculatedDate: {
-    //         $sum: [
-    //             {
-    //                 $multiply: ['$_id.year', 10000000000]
-    //             },
-    //             {
-    //                 $multiply: ['$_id.month', 100000000]
-    //             },
-    //             {
-    //                 $multiply: ['$_id.date', 1000000]
-    //             },
-    //             {
-    //                 $multiply: ['$_id.hour', 10000]
-    //             },
-    //             {
-    //                 $multiply: ['$_id.minute', 100]
-    //             },
-    //             '$_id.second'
-    //         ]
-    //     }
-    // };
-    // req.body.registers.filter(reg => reg != '_id').forEach(function(reg) {
-    //     $group[reg] = {
-    //         $avg: `$data.${reg}`
-    //     };
-    //     $project[reg] = 1;
-    // });
     req.app.sequelize.models.Log.findAll({
         where: where,
         group: ['createdAt'],
