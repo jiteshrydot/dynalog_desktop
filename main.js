@@ -170,6 +170,7 @@ function startMongoNow() {
     // shell.rm('-f', lockfile);
     sequelize = new Sequelize({
         dialect: 'sqlite',
+        logging: false,
         storage: path.join(dataDir, 'database.sqlite3')
     });
     startNodeNow();
@@ -354,6 +355,8 @@ function startModbus(restart) {
                             const readValue = await readRegister(5, register.address, register.type);
                             if(readValue != false) {
                                 input.data[register.key] = convertValue(register, readValue) * (register.multiplier || 1);
+                                console.log('read value', readValue);
+                                console.log('converted value', input.data[register.key]);
                                 if(convertValue(register, readValue) < 0) {
                                     input.data[register.key] = 0;
                                 }
@@ -399,8 +402,8 @@ function startModbus(restart) {
                     global.noReadings = true;
                     sendToWin(win, 'readingStatus', 'off');
                 }
-            // }, 5000)
-            }, item.data.device.interval * 1000)
+            }, 2000)
+            // }, item.data.device.interval * 1000)
             sendToWin(win, 'webApp')
         }
     }).catch(function(err) {
